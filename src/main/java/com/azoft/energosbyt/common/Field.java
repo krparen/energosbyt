@@ -1,15 +1,18 @@
 package com.azoft.energosbyt.common;
 
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
+import javax.xml.bind.annotation.XmlAccessType;
+import javax.xml.bind.annotation.XmlAccessorType;
+import javax.xml.bind.annotation.XmlAttribute;
+import javax.xml.bind.annotation.XmlValue;
 import lombok.Data;
 
 @Data
+@XmlAccessorType(XmlAccessType.FIELD)
 public class Field {
-  @JacksonXmlProperty(isAttribute = true)
+  @XmlAttribute
   private String name;
-  @JacksonXmlProperty(isAttribute = true)
+  @XmlAttribute
   private String type;
-
+  @XmlValue
   private String value;
 }
