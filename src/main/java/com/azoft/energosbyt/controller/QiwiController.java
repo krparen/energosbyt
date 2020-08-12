@@ -22,24 +22,27 @@ public class QiwiController {
     response.setComment("Тестовый фиксированный ответ");
     response.setOsmp_txn_id("13513416");
     response.setResult(0);
+
+    if (request.getCommand() == Command.check) {
+      Field field1 = new Field();
+      field1.setName("name1");
+      field1.setType("type1");
+      field1.setValue("value1");
+
+      Field field2 = new Field();
+      field2.setName("name2");
+      field2.setType("type2");
+      field2.setValue("value2");
+
+      response.setFields(List.of(field1, field2));
+    }
+
     if (request.getCommand() == Command.pay) {
       response.setPrv_txn("49472744");
       BigDecimal sum = BigDecimal.TEN;
       sum = sum.setScale(2);
       response.setSum(sum);
     }
-
-    Field field1 = new Field();
-    field1.setName("name1");
-    field1.setType("type1");
-    field1.setValue("value1");
-
-    Field field2 = new Field();
-    field2.setName("name2");
-    field2.setType("type2");
-    field2.setValue("value2");
-
-    response.setFields(List.of(field1, field2));
 
     return response;
   }
