@@ -12,7 +12,6 @@ import lombok.Data;
 @Data
 @JacksonXmlRootElement(localName = "response")
 public class QiwiResponse {
-  @JacksonXmlProperty(isAttribute = true)
   private String osmp_txn_id;
   @JsonInclude(JsonInclude.Include.NON_NULL)
   private String prv_txn;
