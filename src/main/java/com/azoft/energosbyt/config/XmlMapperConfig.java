@@ -19,10 +19,6 @@ public class XmlMapperConfig {
     mapper.registerModule(new JaxbAnnotationModule());
     ((XmlMapper) mapper).enable(ToXmlGenerator.Feature.WRITE_XML_DECLARATION);
 
-//    SimpleModule listSerializerModule = new SimpleModule("ListSerializerModule", new Version(1, 0, 0, "beta") );
-//    listSerializerModule.addSerializer(new FieldListXmlSerializer());
-//    mapper.registerModule(listSerializerModule);
-
     return new MappingJackson2XmlHttpMessageConverter(mapper);
   }
 }
