@@ -1,7 +1,7 @@
 package com.azoft.energosbyt.service.impl;
 
-import com.azoft.energosbyt.common.Command;
-import com.azoft.energosbyt.common.Field;
+import com.azoft.energosbyt.dto.Command;
+import com.azoft.energosbyt.dto.Field;
 import com.azoft.energosbyt.dto.BasePayment;
 import com.azoft.energosbyt.dto.QiwiRequest;
 import com.azoft.energosbyt.dto.QiwiResponse;

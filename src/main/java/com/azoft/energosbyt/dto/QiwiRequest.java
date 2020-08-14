@@ -1,6 +1,5 @@
 package com.azoft.energosbyt.dto;
 
-import com.azoft.energosbyt.common.Command;
 import java.math.BigDecimal;
 import lombok.Data;
 

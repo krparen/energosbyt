@@ -1,4 +1,4 @@
-package com.azoft.energosbyt.common;
+package com.azoft.energosbyt.dto;
 
 public enum Command {
   pay,

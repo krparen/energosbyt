@@ -1,4 +1,4 @@
-package com.azoft.energosbyt.common;
+package com.azoft.energosbyt.dto;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
