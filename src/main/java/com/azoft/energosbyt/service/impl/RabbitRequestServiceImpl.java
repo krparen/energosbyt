@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.amqp.core.Message;
@@ -41,19 +42,36 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
   @Override
   public QiwiResponse sendRequestToQueue(QiwiRequest qiwiRequest) {
 
-    String replyQueueName = declareReplyQueue();
+    String replyQueueName = null;
 
-    MessageProperties messageProperties = createMessageProperties(replyQueueName);
-    byte[] body = createMessageBody(qiwiRequest);
-    Message requestMessage = new Message(body, messageProperties);
-    template.send(requestQueueName, requestMessage);
+    try {
+      replyQueueName = declareReplyQueue();
 
-    BasePayment rabbitResponse = receiveResponse(replyQueueName);
+      MessageProperties messageProperties = createMessageProperties(replyQueueName);
+      byte[] body = createMessageBody(qiwiRequest);
+      Message requestMessage = new Message(body, messageProperties);
 
-    return getMockQiwiResponse(qiwiRequest);
+      template.send(requestQueueName, requestMessage);
+      BasePayment rabbitResponse = receiveResponse(replyQueueName);
+
+      return getMockQiwiResponse(qiwiRequest);
+    } catch (ApiException e) {
+      throw e;
+    } catch (Exception e) {
+      String message = "Unknown exception happened";
+      log.error(message, e);
+      throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
+    } finally {
+      rabbitAdmin.deleteQueue(replyQueueName);
+    }
   }
 
   private byte[] createMessageBody(QiwiRequest request) {
+    return toRabbitRequestBodyAsString(request)
+        .getBytes(StandardCharsets.UTF_8);
+  }
+
+  private String toRabbitRequestBodyAsString(QiwiRequest request) {
     String bodyAsString = null;
     try {
       bodyAsString = mapper.writeValueAsString(createRabbitRequest(request));
@@ -63,8 +81,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
       throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
     }
     log.info("body as String: {}", bodyAsString);
-
-    return bodyAsString.getBytes(StandardCharsets.UTF_8);
+    return bodyAsString;
   }
 
   private MessageProperties createMessageProperties(String replyQueueName) {
@@ -74,27 +91,24 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     return messageProperties;
   }
 
-  private BasePayment receiveResponse(String replyQueueName){
-    Message responseMessage = template.receive(replyQueueName, requestTimeout);
+  private BasePayment receiveResponse(String replyQueueName) {
+    Message responseMessage = safelyReceiveResponse(replyQueueName);
     String responseAsString = new String(responseMessage.getBody());
-
-    BasePayment response = null;
-    try {
-      response = mapper.readValue(responseAsString, BasePayment.class);
-    } catch (JsonProcessingException e) {
-      String message = "Rabbit response deserialization failed";
-      log.error(message, e);
-      throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
-    }
-
-    log.info("response from rabbit: {}", response);
-    return response;
+    return safelyDeserializeFromResponse(responseAsString);
   }
 
   private String declareReplyQueue() {
     String replyQueueName = UUID.randomUUID().toString();
     Queue newQueue = new Queue(replyQueueName, false, false, true);
-    return rabbitAdmin.declareQueue(newQueue);
+
+    try {
+      return rabbitAdmin.declareQueue(newQueue);
+    } catch (AmqpException e) {
+      String message = "Queue declaration failed";
+      log.error(message, e);
+      throw new ApiException(message, e, QiwiResultCode.TRY_AGAIN_LATER);
+    }
+
   }
 
   private BasePayment createRabbitRequest(QiwiRequest qiwiRequest) {
@@ -133,6 +147,38 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
       response.setSum(sum);
     }
 
+    return response;
+  }
+
+  private Message safelyReceiveResponse(String replyQueueName) {
+    Message responseMessage = null;
+    try {
+      responseMessage = template.receive(replyQueueName, requestTimeout);
+    } catch (AmqpException e) {
+      String message = "Getting a rabbit response from queue " + replyQueueName + " failed";
+      log.error(message, e);
+      throw new ApiException(message, e, QiwiResultCode.TRY_AGAIN_LATER);
+    }
+
+    if (responseMessage == null) {
+      String message = "Rabbit response from queue " + replyQueueName + " failed timeout";
+      log.error(message, replyQueueName);
+      throw new ApiException(message, QiwiResultCode.TRY_AGAIN_LATER);
+    }
+    return responseMessage;
+  }
+
+  private BasePayment safelyDeserializeFromResponse(String responseAsString) {
+    BasePayment response = null;
+    try {
+      response = mapper.readValue(responseAsString, BasePayment.class);
+    } catch (JsonProcessingException e) {
+      String message = "Rabbit response deserialization failed";
+      log.error(message, e);
+      throw new ApiException(message, e, QiwiResultCode.TRY_AGAIN_LATER);
+    }
+
+    log.info("response from rabbit: {}", response);
     return response;
   }
 }
