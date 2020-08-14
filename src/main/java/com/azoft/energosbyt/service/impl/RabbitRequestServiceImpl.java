@@ -48,8 +48,6 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
     BasePayment rabbitResponse = receiveResponse(replyQueueName);
 
-    rabbitAdmin.deleteQueue(replyQueueName);
-
     return getMockQiwiResponse(qiwiRequest);
   }
 
@@ -77,7 +75,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
   private String declareReplyQueue() {
     String replyQueueName = UUID.randomUUID().toString();
-    Queue newQueue = new Queue(replyQueueName);
+    Queue newQueue = new Queue(replyQueueName, false, false, true);
     return rabbitAdmin.declareQueue(newQueue);
   }
 
