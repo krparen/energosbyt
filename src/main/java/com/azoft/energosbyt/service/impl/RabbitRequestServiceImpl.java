@@ -5,6 +5,8 @@ import com.azoft.energosbyt.dto.Field;
 import com.azoft.energosbyt.dto.BasePayment;
 import com.azoft.energosbyt.dto.QiwiRequest;
 import com.azoft.energosbyt.dto.QiwiResponse;
+import com.azoft.energosbyt.exception.ApiException;
+import com.azoft.energosbyt.exception.QiwiResultCode;
 import com.azoft.energosbyt.service.RabbitRequestService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,7 +39,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
   private Long requestTimeout;
 
   @Override
-  public QiwiResponse sendRequestToQueue(QiwiRequest qiwiRequest) throws JsonProcessingException {
+  public QiwiResponse sendRequestToQueue(QiwiRequest qiwiRequest) {
 
     String replyQueueName = declareReplyQueue();
 
@@ -51,8 +53,15 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     return getMockQiwiResponse(qiwiRequest);
   }
 
-  private byte[] createMessageBody(QiwiRequest request) throws JsonProcessingException {
-    String bodyAsString = mapper.writeValueAsString(createRabbitRequest(request));
+  private byte[] createMessageBody(QiwiRequest request) {
+    String bodyAsString = null;
+    try {
+      bodyAsString = mapper.writeValueAsString(createRabbitRequest(request));
+    } catch (JsonProcessingException e) {
+      String message = "Rabbit request serialization failed";
+      log.error(message, e);
+      throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
+    }
     log.info("body as String: {}", bodyAsString);
 
     return bodyAsString.getBytes(StandardCharsets.UTF_8);
@@ -65,10 +74,19 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     return messageProperties;
   }
 
-  private BasePayment receiveResponse(String replyQueueName) throws JsonProcessingException {
+  private BasePayment receiveResponse(String replyQueueName){
     Message responseMessage = template.receive(replyQueueName, requestTimeout);
     String responseAsString = new String(responseMessage.getBody());
-    BasePayment response = mapper.readValue(responseAsString, BasePayment.class);
+
+    BasePayment response = null;
+    try {
+      response = mapper.readValue(responseAsString, BasePayment.class);
+    } catch (JsonProcessingException e) {
+      String message = "Rabbit response deserialization failed";
+      log.error(message, e);
+      throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
+    }
+
     log.info("response from rabbit: {}", response);
     return response;
   }
