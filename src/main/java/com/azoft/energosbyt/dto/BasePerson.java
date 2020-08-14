@@ -3,11 +3,9 @@ package com.azoft.energosbyt.dto;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
 
-@Getter
-@Setter
+@Data
 public class BasePerson {
 
   private String id;
@@ -24,9 +22,9 @@ public class BasePerson {
   private String place_of_birth;
   private String sex;
 
-  private List<Email> emails = new ArrayList<Email>();
-  private List<Phone> phones = new ArrayList<Phone>();
-  private List<Doc> docs = new ArrayList<Doc>();
+  private List<Email> emails = new ArrayList<>();
+  private List<Phone> phones = new ArrayList<>();
+  private List<Doc> docs = new ArrayList<>();
 
   private String is_main_client;
   private String account_rel_type;
@@ -43,8 +41,7 @@ public class BasePerson {
   private Srch_res srch_res = new Srch_res();
   private Srch srch = new Srch();
 
-  @Getter
-  @Setter
+  @Data
   public static class Email {
     private String id;
     private String type;
@@ -54,12 +51,10 @@ public class BasePerson {
     private String sequence;
   }
 
-  @Getter
-  @Setter
+  @Data
   public static class Srch_res {
 
-    @Getter
-    @Setter
+    @Data
     public static class pers {
       private String id;
       private String fio;
@@ -70,8 +65,7 @@ public class BasePerson {
     private List<pers> res = new ArrayList<>();
   }
 
-  @Getter
-  @Setter
+  @Data
   public static class Srch {
     private String last_name;
     private String first_name;
@@ -89,8 +83,7 @@ public class BasePerson {
     private String email;
   }
 
-  @Getter
-  @Setter
+  @Data
   public static class Phone {
     private String id;
     private String type;
@@ -101,8 +94,7 @@ public class BasePerson {
     private String contactId;
   }
 
-  @Getter
-  @Setter
+  @Data
   public static class Doc {
     private String seria;
     private String doc_number;
@@ -114,17 +106,15 @@ public class BasePerson {
     private String dept_code;
   }
 
-  @Getter
-  @Setter
+  @Data
   public static class Account {
     private String account_number;
     private String contract_number;
-    private List<AccountServ> accounts = new ArrayList<AccountServ>();
-    private AccountPrem premise ;
+    private List<AccountServ> accounts = new ArrayList<>();
+    private AccountPrem premise;
     private String Division;
 
-    @Getter
-    @Setter
+    @Data
     public static class AccountServ {
       private String account_id;
       private String customer_class;
@@ -139,8 +129,7 @@ public class BasePerson {
       private String service_prov_desc;
     }
 
-    @Getter
-    @Setter
+    @Data
     public static class AccountPrem {
       private String premise_id;
       private String postal;
@@ -152,8 +141,7 @@ public class BasePerson {
 
   }
 
-  @Getter
-  @Setter
+  @Data
   public static class Premise {
     private String premise_id;
     private String postal;
@@ -162,8 +150,7 @@ public class BasePerson {
     private String street;
     private List<PremiseAcct> accounts = new ArrayList<PremiseAcct>();
 
-    @Getter
-    @Setter
+    @Data
     public static class PremiseAcct {
       private String account_id;
       private String customer_class;

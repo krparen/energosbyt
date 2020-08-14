@@ -1,0 +1,5 @@
+energosbyt:
+  rabbit:
+    request:
+      queue-name: queue1
+      timeout-in-ms: 30000

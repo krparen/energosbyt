@@ -2,25 +2,22 @@ package com.azoft.energosbyt.dto;
 
 import java.util.ArrayList;
 import java.util.List;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
 
-@Getter
-@Setter
+@Data
 public class BasePayment {
   private String acct_id;
-  private float  sm;
+  private float sm;
   private String id;
   private String system_id;
-  private String action ;
+  private String action;
   private String error_code;
   private String error_message;
   private Srch srch;
   private Srch_res res;
 
-  @Getter
-  @Setter
-  public class Srch {
+  @Data
+  public static class Srch {
     private String account_id;
     private String client_id;
     private String period_from;
@@ -29,25 +26,22 @@ public class BasePayment {
     private String limit;
   }
 
-  @Getter
-  @Setter
-  public class Srch_res{
+  @Data
+  public static class Srch_res {
     private List<Srch_res_pay> srch_res_pay = new ArrayList<>();
     private List<Srch_res_payment> srch_res_payment = new ArrayList<>();
   }
 
-  @Getter
-  @Setter
-  public static class Srch_res_pay{
+  @Data
+  public static class Srch_res_pay {
     private String pay_evt_id;
     private String pay_date;
     private String pay_ammount;
     private List<PayServ> payServ = new ArrayList<>();
   }
 
-  @Getter
-  @Setter
-  public static class Srch_res_payment{
+  @Data
+  public static class Srch_res_payment {
     private String Id;
     private float StartBalance;
     private float Payed;
@@ -70,13 +64,12 @@ public class BasePayment {
     private String ServVendorId;
   }
 
-  @Getter
-  @Setter
-  public static  class PayServ{
+  @Data
+  public static class PayServ {
     private String service_type;
     private String ammount;
     private String account_id;
     private String payment_id;
-    private String service_type_desc ;
+    private String service_type_desc;
   }
 }
