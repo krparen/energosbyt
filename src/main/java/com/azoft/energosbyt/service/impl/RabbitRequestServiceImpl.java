@@ -1,8 +1,8 @@
 package com.azoft.energosbyt.service.impl;
 
+import com.azoft.energosbyt.dto.BasePayment;
 import com.azoft.energosbyt.dto.Command;
 import com.azoft.energosbyt.dto.Field;
-import com.azoft.energosbyt.dto.BasePayment;
 import com.azoft.energosbyt.dto.QiwiRequest;
 import com.azoft.energosbyt.dto.QiwiResponse;
 import com.azoft.energosbyt.exception.ApiException;
@@ -24,6 +24,7 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.Queue;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -40,13 +41,13 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
   private Long requestTimeout;
 
   @Override
+  @Transactional
   public QiwiResponse sendRequestToQueue(QiwiRequest qiwiRequest) {
 
     String replyQueueName = null;
 
     try {
       replyQueueName = declareReplyQueue();
-
       MessageProperties messageProperties = createMessageProperties(replyQueueName);
       byte[] body = createMessageBody(qiwiRequest);
       Message requestMessage = new Message(body, messageProperties);
