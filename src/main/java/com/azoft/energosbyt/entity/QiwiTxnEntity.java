@@ -27,10 +27,10 @@ public class QiwiTxnEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Enumerated(EnumType.STRING)
-  private Command command;
   private String txnId;
   private LocalDateTime txnDate;
+  @Enumerated(EnumType.STRING)
+  private Command command;
   private String account;
   private BigDecimal sum;
 

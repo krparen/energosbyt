@@ -1,10 +1,12 @@
 package com.azoft.energosbyt.service.impl;
 
+import com.azoft.energosbyt.QiwiTxnRepository;
 import com.azoft.energosbyt.dto.BasePayment;
 import com.azoft.energosbyt.dto.Command;
 import com.azoft.energosbyt.dto.Field;
 import com.azoft.energosbyt.dto.QiwiRequest;
 import com.azoft.energosbyt.dto.QiwiResponse;
+import com.azoft.energosbyt.entity.QiwiTxnEntity;
 import com.azoft.energosbyt.exception.ApiException;
 import com.azoft.energosbyt.exception.QiwiResultCode;
 import com.azoft.energosbyt.service.RabbitRequestService;
@@ -14,7 +16,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -28,17 +29,27 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class RabbitRequestServiceImpl implements RabbitRequestService {
+
+  private static final String TXN_RECORD_WITH_SAME_ID_EXISTS =
+      "Транзакция с id = %s уже в обработке или завершена";
 
   private final AmqpTemplate template;
   private final AmqpAdmin rabbitAdmin;
   private final ObjectMapper mapper;
+  private final QiwiTxnRepository qiwiTxnRepository;
 
   @Value("${energosbyt.rabbit.request.queue-name}")
   private String requestQueueName;
   @Value("${energosbyt.rabbit.request.timeout-in-ms}")
   private Long requestTimeout;
+
+  public RabbitRequestServiceImpl(AmqpTemplate template, AmqpAdmin rabbitAdmin, ObjectMapper mapper, QiwiTxnRepository qiwiTxnRepository) {
+    this.template = template;
+    this.rabbitAdmin = rabbitAdmin;
+    this.mapper = mapper;
+    this.qiwiTxnRepository = qiwiTxnRepository;
+  }
 
   @Override
   @Transactional
@@ -47,6 +58,17 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     String replyQueueName = null;
 
     try {
+
+      if (qiwiRequest.getCommand() == Command.pay) {
+        QiwiTxnEntity txnWithSameId = qiwiTxnRepository.findByTxnId(qiwiRequest.getTxn_id());
+        if (txnWithSameId == null) {
+          createTxnRecord(qiwiRequest);
+        } else {
+          return txnRecordExistsResponse(qiwiRequest);
+        }
+      }
+
+
       replyQueueName = declareReplyQueue();
       MessageProperties messageProperties = createMessageProperties(replyQueueName);
       byte[] body = createMessageBody(qiwiRequest);
@@ -63,8 +85,30 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
       log.error(message, e);
       throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
     } finally {
-      rabbitAdmin.deleteQueue(replyQueueName);
+      if (replyQueueName != null) {
+        rabbitAdmin.deleteQueue(replyQueueName);
+      }
     }
+  }
+
+  private QiwiResponse txnRecordExistsResponse(QiwiRequest qiwiRequest) {
+    QiwiResponse qiwiResponse = new QiwiResponse();
+    qiwiResponse.setResult(QiwiResultCode.PAYMENT_FORBIDDEN_BY_PROVIDER.getNumericCode());
+
+    String comment = String.format(TXN_RECORD_WITH_SAME_ID_EXISTS, qiwiRequest.getTxn_id());
+    qiwiResponse.setComment(comment);
+
+    return qiwiResponse;
+  }
+
+  private void createTxnRecord(QiwiRequest qiwiRequest) {
+    QiwiTxnEntity newTxnRecord = new QiwiTxnEntity();
+    newTxnRecord.setTxnId(qiwiRequest.getTxn_id());
+    newTxnRecord.setTxnDate(qiwiRequest.getTxn_date());
+    newTxnRecord.setCommand(qiwiRequest.getCommand());
+    newTxnRecord.setAccount(qiwiRequest.getAccount());
+    newTxnRecord.setSum(qiwiRequest.getSum());
+    qiwiTxnRepository.save(newTxnRecord);
   }
 
   private byte[] createMessageBody(QiwiRequest request) {
