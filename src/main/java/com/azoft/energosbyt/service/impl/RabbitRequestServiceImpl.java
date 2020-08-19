@@ -93,7 +93,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
   private QiwiResponse txnRecordExistsResponse(QiwiRequest qiwiRequest) {
     QiwiResponse qiwiResponse = new QiwiResponse();
-    qiwiResponse.setResult(QiwiResultCode.PAYMENT_FORBIDDEN_BY_PROVIDER.getNumericCode());
+    qiwiResponse.setResult(QiwiResultCode.OTHER_PROVIDER_ERROR.getNumericCode());
 
     String comment = String.format(TXN_RECORD_WITH_SAME_ID_EXISTS, qiwiRequest.getTxn_id());
     qiwiResponse.setComment(comment);
