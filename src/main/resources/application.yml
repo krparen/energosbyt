@@ -22,6 +22,10 @@ spring:
 
 energosbyt:
   rabbit:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
     request:
       queue-name: queue1
       timeout-in-ms: 30000
