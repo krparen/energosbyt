@@ -20,6 +20,8 @@ spring:
 
 
 energosbyt:
+  application:
+    system-id: 1010
   rabbit:
     host: 10.5.3.70
     port: 5672

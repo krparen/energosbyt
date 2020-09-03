@@ -37,6 +37,8 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     private String requestQueueName;
     @Value("${energosbyt.rabbit.request.timeout-in-ms}")
     private Long requestTimeout;
+    @Value("${energosbyt.application.system-id}")
+    private String systemId;
 
     public RabbitRequestServiceImpl(AmqpTemplate template, AmqpAdmin rabbitAdmin, ObjectMapper mapper, QiwiTxnRepository qiwiTxnRepository) {
         this.template = template;
@@ -154,7 +156,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
     private BasePerson createRabbitRequest(QiwiRequest qiwiRequest) {
         BasePerson rabbitRequest = new BasePerson();
-        rabbitRequest.setSystem_id("1010");
+        rabbitRequest.setSystem_id(systemId);
 
         BasePerson.Srch search = new BasePerson.Srch();
         search.setAccount_number(qiwiRequest.getAccount());

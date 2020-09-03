@@ -20,19 +20,10 @@ public class QiwiController {
 
   private final RabbitRequestService rabbitRequestService;
 
-  @RequestMapping(value = "/api/checkOrPay")
-  public ResponseEntity<QiwiResponse> getOrPay(QiwiRequest request) throws JsonProcessingException {
+  @RequestMapping(value = "/api/checkOrPay", produces = "application/xml;charset=UTF-8")
+  public QiwiResponse getOrPay(QiwiRequest request) throws JsonProcessingException {
 
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.valueOf("application/xml;charset=UTF-8"));
-
-    QiwiResponse qiwiResponse = rabbitRequestService.sendRequestToQueue(request);
-    ResponseEntity<QiwiResponse> result = ResponseEntity
-            .status(HttpStatus.OK)
-            .headers(headers)
-            .body(qiwiResponse);
-
-    return result;
+    return rabbitRequestService.sendRequestToQueue(request);
   }
 
 }
