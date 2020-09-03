@@ -10,15 +10,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 @ControllerAdvice
 public class ApplicationExceptionHandler {
 
-  @ExceptionHandler(ApiException.class)
-  public ResponseEntity<QiwiResponse> handleApiException(ApiException exception) {
-    QiwiResponse response = new QiwiResponse();
-    if (exception.getErrorCode() != null) {
-      response.setResult(exception.getErrorCode().getNumericCode());
-    }
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<QiwiResponse> handleApiException(ApiException exception) {
+        QiwiResponse response = new QiwiResponse();
+        if (exception.getErrorCode() != null) {
+            response.setResult(exception.getErrorCode().getNumericCode());
+            response.setComment("Сообщение на русском для проверки кодировки");
+        }
 
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .contentType(MediaType.APPLICATION_XML)
-        .body(response);
-  }
+        return ResponseEntity.status(HttpStatus.OK)
+                .contentType(MediaType.APPLICATION_XML)
+                .body(response);
+    }
 }

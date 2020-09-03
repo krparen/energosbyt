@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -131,9 +132,9 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         return messageProperties;
     }
 
-    private BasePerson receiveResponse(String replyQueueName) {
+    private BasePerson receiveResponse(String replyQueueName) throws UnsupportedEncodingException {
         Message responseMessage = safelyReceiveResponse(replyQueueName);
-        String responseAsString = new String(responseMessage.getBody());
+        String responseAsString = new String(responseMessage.getBody(), StandardCharsets.UTF_8.name());
         return safelyDeserializeFromResponse(responseAsString);
     }
 

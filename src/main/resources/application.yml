@@ -27,4 +27,4 @@ energosbyt:
     password: Etooshagh5
     request:
       queue-name: ccb
-      timeout-in-ms: 30000
+      timeout-in-ms: 3000
