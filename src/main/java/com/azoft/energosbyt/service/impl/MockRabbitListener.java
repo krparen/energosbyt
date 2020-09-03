@@ -14,8 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Slf4j
-@EnableRabbit //нужно для активации обработки аннотаций @RabbitListener
-@Component
+//@EnableRabbit //нужно для активации обработки аннотаций @RabbitListener
+//@Component
 public class MockRabbitListener {
 
   @Autowired

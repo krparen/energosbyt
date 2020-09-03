@@ -1,31 +1,24 @@
 package com.azoft.energosbyt.service.impl;
 
 import com.azoft.energosbyt.QiwiTxnRepository;
-import com.azoft.energosbyt.dto.BasePayment;
-import com.azoft.energosbyt.dto.Command;
-import com.azoft.energosbyt.dto.Field;
-import com.azoft.energosbyt.dto.QiwiRequest;
-import com.azoft.energosbyt.dto.QiwiResponse;
+import com.azoft.energosbyt.dto.*;
 import com.azoft.energosbyt.entity.QiwiTxnEntity;
 import com.azoft.energosbyt.exception.ApiException;
 import com.azoft.energosbyt.exception.QiwiResultCode;
 import com.azoft.energosbyt.service.RabbitRequestService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.core.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.AmqpException;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.AmqpTemplate;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
-import org.springframework.amqp.core.Queue;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -70,12 +63,12 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
 
       replyQueueName = declareReplyQueue();
-      MessageProperties messageProperties = createMessageProperties(replyQueueName);
+      MessageProperties messageProperties = createMessageProperties(replyQueueName, qiwiRequest);
       byte[] body = createMessageBody(qiwiRequest);
       Message requestMessage = new Message(body, messageProperties);
 
       template.send(requestQueueName, requestMessage);
-      BasePayment rabbitResponse = receiveResponse(replyQueueName);
+      BasePerson rabbitResponse = receiveResponse(replyQueueName);
 
       return getMockQiwiResponse(qiwiRequest);
     } catch (ApiException e) {
@@ -129,14 +122,16 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     return bodyAsString;
   }
 
-  private MessageProperties createMessageProperties(String replyQueueName) {
+  private MessageProperties createMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
     MessageProperties messageProperties = new MessageProperties();
-    messageProperties.setReplyTo(replyQueueName);
+    messageProperties.setHeader("type", qiwiRequest.getCommand().getRabbitType());
+    messageProperties.setHeader("m_guid", "08.06.2020");
+    messageProperties.setHeader("reply-to", replyQueueName);
     messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
     return messageProperties;
   }
 
-  private BasePayment receiveResponse(String replyQueueName) {
+  private BasePerson receiveResponse(String replyQueueName) {
     Message responseMessage = safelyReceiveResponse(replyQueueName);
     String responseAsString = new String(responseMessage.getBody());
     return safelyDeserializeFromResponse(responseAsString);
@@ -156,11 +151,13 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
   }
 
-  private BasePayment createRabbitRequest(QiwiRequest qiwiRequest) {
-    BasePayment rabbitRequest = new BasePayment();
-    BasePayment.Srch search = new BasePayment.Srch();
-    search.setAccount_id(qiwiRequest.getAccount());
-    search.setLimit("SomeLimit");
+  private BasePerson createRabbitRequest(QiwiRequest qiwiRequest) {
+    BasePerson rabbitRequest = new BasePerson();
+    rabbitRequest.setSystem_id("1010");
+
+    BasePerson.Srch search = new BasePerson.Srch();
+    search.setAccount_number(qiwiRequest.getAccount());
+    search.setDept("SESB");
     rabbitRequest.setSrch(search);
     return rabbitRequest;
   }
@@ -213,10 +210,10 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     return responseMessage;
   }
 
-  private BasePayment safelyDeserializeFromResponse(String responseAsString) {
-    BasePayment response = null;
+  private BasePerson safelyDeserializeFromResponse(String responseAsString) {
+    BasePerson response = null;
     try {
-      response = mapper.readValue(responseAsString, BasePayment.class);
+      response = mapper.readValue(responseAsString, BasePerson.class);
     } catch (JsonProcessingException e) {
       String message = "Rabbit response deserialization failed";
       log.error(message, e);

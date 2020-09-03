@@ -1,11 +1,11 @@
 spring:
   datasource:
-    driver-class-name: org.postgresql.Driver
-    username: postgres
-    password: postgres
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
     hikari:
       maximum-pool-size: 5
-    url: jdbc:postgresql://localhost:5432/qiwi-energosbyt
+    url: jdbc:h2:mem:medtech-application;DB_CLOSE_ON_EXIT=FALSE
   jpa:
     show-sql: true
     hibernate:
@@ -14,7 +14,6 @@ spring:
       hibernate:
         order_updates: true
         order_inserts: true
-        dialect: org.hibernate.dialect.PostgreSQL95Dialect
   liquibase:
     enabled: true
     change-log: classpath:/db-migrations/explicit-order.xml
@@ -22,10 +21,10 @@ spring:
 
 energosbyt:
   rabbit:
-    host: localhost
+    host: 10.5.3.70
     port: 5672
-    username: guest
-    password: guest
+    username: admin
+    password: Etooshagh5
     request:
-      queue-name: queue1
+      queue-name: ccb
       timeout-in-ms: 30000
