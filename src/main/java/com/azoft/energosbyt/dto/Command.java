@@ -3,7 +3,7 @@ package com.azoft.energosbyt.dto;
 import lombok.Getter;
 
 public enum Command {
-  pay("currently_unknown"),
+  pay("setPayLkk"),
   check("searchPerson");
 
   @Getter

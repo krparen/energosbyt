@@ -16,8 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.UnsupportedEncodingException;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,17 +31,28 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     private static final String TXN_RECORD_WITH_SAME_ID_EXISTS =
             "Транзакция с id = %s уже в обработке или завершена";
 
+    /**
+     * Используется для форматирования даты при отправке сообщения в очередь pay
+     */
+    private static final DateTimeFormatter payDateTimeFormatter =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
+
     private final AmqpTemplate template;
     private final AmqpAdmin rabbitAdmin;
     private final ObjectMapper mapper;
     private final QiwiTxnRepository qiwiTxnRepository;
 
-    @Value("${energosbyt.rabbit.request.queue-name}")
-    private String requestQueueName;
+    @Value("${energosbyt.rabbit.request.check.queue-name}")
+    private String checkRequestQueueName;
+    @Value("${energosbyt.rabbit.request.pay.queue-name}")
+    private String payRequestQueueName;
     @Value("${energosbyt.rabbit.request.timeout-in-ms}")
     private Long requestTimeout;
-    @Value("${energosbyt.application.system-id}")
-    private String systemId;
+    @Value("${energosbyt.application.this-system-id}")
+    private String thisSystemId;
+    @Value("${energosbyt.application.qiwi-system-id}")
+    private String qiwiSystemId;
+
 
     public RabbitRequestServiceImpl(AmqpTemplate template, AmqpAdmin rabbitAdmin, ObjectMapper mapper, QiwiTxnRepository qiwiTxnRepository) {
         this.template = template;
@@ -54,26 +68,31 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         String replyQueueName = null;
 
         try {
-
-            if (qiwiRequest.getCommand() == Command.pay) {
-                QiwiTxnEntity txnWithSameId = qiwiTxnRepository.findByTxnId(qiwiRequest.getTxn_id());
-                if (txnWithSameId == null) {
-                    createTxnRecord(qiwiRequest);
-                } else {
-                    return txnRecordExistsResponse(qiwiRequest);
-                }
+            QiwiTxnEntity txnWithSameId = qiwiTxnRepository.findByTxnId(qiwiRequest.getTxn_id());
+            if (txnWithSameId == null) {
+                createTxnRecord(qiwiRequest);
+            } else {
+                return txnRecordExistsResponse(qiwiRequest);
             }
 
 
-            replyQueueName = declareReplyQueue();
-            MessageProperties messageProperties = createMessageProperties(replyQueueName, qiwiRequest);
-            byte[] body = createMessageBody(qiwiRequest);
-            Message requestMessage = new Message(body, messageProperties);
+            if (qiwiRequest.getCommand() == Command.check) {
+                replyQueueName = declareReplyQueue();
+                MessageProperties messageProperties = createCheckMessageProperties(replyQueueName, qiwiRequest);
+                byte[] body = createCheckMessageBody(qiwiRequest);
+                Message requestMessage = new Message(body, messageProperties);
 
-            template.send(requestQueueName, requestMessage);
-            BasePerson rabbitResponse = receiveResponse(replyQueueName);
+                template.send(checkRequestQueueName, requestMessage);
+                BasePerson rabbitResponse = receiveResponse(replyQueueName);
 
-            return getQiwiResponse(qiwiRequest, rabbitResponse);
+                return getCheckQiwiResponse(qiwiRequest, rabbitResponse);
+            } else {
+                MessageProperties messageProperties = createPayMessageProperties();
+                byte[] body = createPayMessageBody(qiwiRequest);
+                Message requestMessage = new Message(body, messageProperties);
+                template.send(payRequestQueueName, requestMessage);
+                return QiwiResponse.ok();
+            }
         } catch (ApiException e) {
             throw e;
         } catch (Exception e) {
@@ -107,11 +126,11 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         qiwiTxnRepository.save(newTxnRecord);
     }
 
-    private byte[] createMessageBody(QiwiRequest request) {
+    private byte[] createCheckMessageBody(QiwiRequest request) {
 
         String bodyAsString = null;
         try {
-            bodyAsString = mapper.writeValueAsString(createRabbitRequest(request));
+            bodyAsString = mapper.writeValueAsString(createCheckRabbitRequest(request));
         } catch (JsonProcessingException e) {
             String message = "Rabbit request serialization failed";
             log.error(message, e);
@@ -122,11 +141,46 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         return bodyAsString.getBytes(StandardCharsets.UTF_8);
     }
 
-    private MessageProperties createMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
+    private byte[] createPayMessageBody(QiwiRequest qiwiRequest) {
+
+        String bodyAsString = null;
+        try {
+            bodyAsString = mapper.writeValueAsString(createPayRabbitRequest(qiwiRequest));
+        } catch (JsonProcessingException e) {
+            String message = "Rabbit request serialization failed";
+            log.error(message, e);
+            throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
+        }
+        log.info("body as String: {}", bodyAsString);
+
+        return bodyAsString.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private BasePayCashLkk createPayRabbitRequest(QiwiRequest qiwiRequest) {
+        BasePayCashLkk cash = new BasePayCashLkk();
+        cash.setAccount_id(qiwiRequest.getAccount());
+        cash.setAmmount(qiwiRequest.getSum().floatValue());
+        cash.setTrx_id(qiwiRequest.getTxn_id());
+        cash.setPayDate(dateFromLocalDateTime(qiwiRequest.getTxn_date()));
+        return cash;
+    }
+
+    private MessageProperties createCheckMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
         MessageProperties messageProperties = new MessageProperties();
         messageProperties.setHeader("type", qiwiRequest.getCommand().getRabbitType());
         messageProperties.setHeader("m_guid", "08.06.2020");
         messageProperties.setHeader("reply-to", replyQueueName);
+        messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
+        return messageProperties;
+    }
+
+    private MessageProperties createPayMessageProperties() {
+        MessageProperties messageProperties = new MessageProperties();
+        messageProperties.setHeader("system_id", qiwiSystemId);
+        messageProperties.setHeader("m_guid", UUID.randomUUID().toString());
+        messageProperties.setHeader("type", Command.pay.getRabbitType());
+        messageProperties.setHeader("m_date",
+                LocalDateTime.now().format(payDateTimeFormatter));
         messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
         return messageProperties;
     }
@@ -151,9 +205,9 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
     }
 
-    private BasePerson createRabbitRequest(QiwiRequest qiwiRequest) {
+    private BasePerson createCheckRabbitRequest(QiwiRequest qiwiRequest) {
         BasePerson rabbitRequest = new BasePerson();
-        rabbitRequest.setSystem_id(systemId);
+        rabbitRequest.setSystem_id(thisSystemId);
 
         BasePerson.Srch search = new BasePerson.Srch();
         search.setAccount_number(qiwiRequest.getAccount());
@@ -162,30 +216,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         return rabbitRequest;
     }
 
-    private QiwiResponse getQiwiResponse(QiwiRequest qiwiRequest, BasePerson rabbitResponse) {
-
-        if (qiwiRequest.getCommand() == Command.check) {
-            return prepareCheckResponse(qiwiRequest, rabbitResponse);
-        } else if (qiwiRequest.getCommand() == Command.pay) {
-            return preparePayResponse();
-        }
-
-        return new QiwiResponse();
-    }
-
-    private QiwiResponse preparePayResponse() {
-        QiwiResponse response = new QiwiResponse();
-        response.setComment("Тестовый фиксированный ответ");
-        response.setOsmp_txn_id("13513416");
-        response.setResult(0);
-        response.setPrv_txn("49472744");
-        BigDecimal sum = BigDecimal.TEN;
-        sum = sum.setScale(2);
-        response.setSum(sum);
-        return response;
-    }
-
-    private QiwiResponse prepareCheckResponse(QiwiRequest qiwiRequest, BasePerson rabbitResponse) {
+    private QiwiResponse getCheckQiwiResponse(QiwiRequest qiwiRequest, BasePerson rabbitResponse) {
 
         QiwiResponse response = new QiwiResponse();
 
@@ -241,5 +272,10 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
         log.info("response from rabbit: {}", response);
         return response;
+    }
+
+    private Date dateFromLocalDateTime(LocalDateTime dateToConvert) {
+        return java.util.Date
+                .from(dateToConvert.atZone(ZoneId.systemDefault()).toInstant());
     }
 }

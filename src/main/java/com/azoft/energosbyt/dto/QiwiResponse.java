@@ -1,5 +1,6 @@
 package com.azoft.energosbyt.dto;
 
+import com.azoft.energosbyt.exception.QiwiResultCode;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
@@ -23,4 +24,9 @@ public class QiwiResponse {
   @JacksonXmlProperty(localName = "field")
   private List<Field> fields;
 
+  public static QiwiResponse ok() {
+    QiwiResponse result = new QiwiResponse();
+    result.setResult(QiwiResultCode.OK.getNumericCode());
+    return result;
+  }
 }
