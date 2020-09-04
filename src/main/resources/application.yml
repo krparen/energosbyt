@@ -1,11 +1,11 @@
 spring:
   datasource:
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    driver-class-name: org.postgresql.Driver
+    username: fiscaladmin
+    password: Ec0PyqvD
     hikari:
       maximum-pool-size: 5
-    url: jdbc:h2:mem:medtech-application;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:postgresql://10.5.2.48:5432/postgres
   jpa:
     show-sql: true
     hibernate:
@@ -29,4 +29,4 @@ energosbyt:
     password: Etooshagh5
     request:
       queue-name: ccb
-      timeout-in-ms: 3000
+      timeout-in-ms: 30000

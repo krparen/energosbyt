@@ -108,11 +108,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
     }
 
     private byte[] createMessageBody(QiwiRequest request) {
-        return toRabbitRequestBodyAsString(request)
-                .getBytes(StandardCharsets.UTF_8);
-    }
 
-    private String toRabbitRequestBodyAsString(QiwiRequest request) {
         String bodyAsString = null;
         try {
             bodyAsString = mapper.writeValueAsString(createRabbitRequest(request));
@@ -122,7 +118,8 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
             throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
         }
         log.info("body as String: {}", bodyAsString);
-        return bodyAsString;
+
+        return bodyAsString.getBytes(StandardCharsets.UTF_8);
     }
 
     private MessageProperties createMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
