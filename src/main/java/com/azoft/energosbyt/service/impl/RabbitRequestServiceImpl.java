@@ -70,7 +70,9 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         try {
             QiwiTxnEntity txnWithSameId = qiwiTxnRepository.findByTxnId(qiwiRequest.getTxn_id());
             if (txnWithSameId == null) {
-                createTxnRecord(qiwiRequest);
+                if (qiwiRequest.getCommand() == Command.pay) {
+                    createTxnRecord(qiwiRequest);
+                }
             } else {
                 return txnRecordExistsResponse(qiwiRequest);
             }
@@ -158,6 +160,7 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
 
     private BasePayCashLkk createPayRabbitRequest(QiwiRequest qiwiRequest) {
         BasePayCashLkk cash = new BasePayCashLkk();
+        cash.setSystem_id(qiwiSystemId);
         cash.setAccount_id(qiwiRequest.getAccount());
         cash.setAmmount(qiwiRequest.getSum().floatValue());
         cash.setTrx_id(qiwiRequest.getTxn_id());
