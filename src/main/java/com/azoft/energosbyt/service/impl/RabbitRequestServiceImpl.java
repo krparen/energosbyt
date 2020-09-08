@@ -1,6 +1,6 @@
 package com.azoft.energosbyt.service.impl;
 
-import com.azoft.energosbyt.QiwiTxnRepository;
+import com.azoft.energosbyt.repository.QiwiTxnRepository;
 import com.azoft.energosbyt.dto.*;
 import com.azoft.energosbyt.entity.QiwiTxnEntity;
 import com.azoft.energosbyt.exception.ApiException;

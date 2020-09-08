@@ -13,9 +13,10 @@ public class ApplicationExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<QiwiResponse> handleApiException(ApiException exception) {
         QiwiResponse response = new QiwiResponse();
-        if (exception.getErrorCode() != null) {
-            response.setResult(exception.getErrorCode().getNumericCode());
-            response.setComment("Сообщение на русском для проверки кодировки");
+        response.setResult(exception.getErrorCode().getNumericCode());
+        response.setComment("Сообщение на русском для проверки кодировки");
+        if (exception.isUseMessageAsComment()) {
+            response.setComment(exception.getMessage());
         }
 
         return ResponseEntity.status(HttpStatus.OK)

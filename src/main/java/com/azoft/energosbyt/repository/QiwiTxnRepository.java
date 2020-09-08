@@ -1,4 +1,4 @@
-package com.azoft.energosbyt;
+package com.azoft.energosbyt.repository;
 
 import com.azoft.energosbyt.entity.QiwiTxnEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
