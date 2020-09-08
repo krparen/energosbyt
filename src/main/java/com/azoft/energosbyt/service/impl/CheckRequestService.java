@@ -41,15 +41,24 @@ public class CheckRequestService implements QiwiRequestService {
 
     @Override
     public QiwiResponse process(QiwiRequest qiwiRequest) {
-        String replyQueueName = declareReplyQueue();
-        MessageProperties messageProperties = createCheckMessageProperties(replyQueueName, qiwiRequest);
-        byte[] body = createCheckMessageBody(qiwiRequest);
-        Message requestMessage = new Message(body, messageProperties);
 
-        template.send(checkRequestQueueName, requestMessage);
-        BasePerson rabbitResponse = receiveResponse(replyQueueName);
+        String replyQueueName = null;
 
-        return getCheckQiwiResponse(qiwiRequest, rabbitResponse);
+        try {
+            replyQueueName = declareReplyQueue();
+            MessageProperties messageProperties = createCheckMessageProperties(replyQueueName, qiwiRequest);
+            byte[] body = createCheckMessageBody(qiwiRequest);
+            Message requestMessage = new Message(body, messageProperties);
+
+            template.send(checkRequestQueueName, requestMessage);
+            BasePerson rabbitResponse = receiveResponse(replyQueueName);
+
+            return getCheckQiwiResponse(qiwiRequest, rabbitResponse);
+        } finally {
+            if (replyQueueName != null) {
+                rabbitAdmin.deleteQueue(replyQueueName);
+            }
+        }
     }
 
     private String declareReplyQueue() {
