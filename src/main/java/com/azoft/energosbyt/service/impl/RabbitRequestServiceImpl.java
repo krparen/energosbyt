@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -241,7 +242,11 @@ public class RabbitRequestServiceImpl implements RabbitRequestService {
         fio.setType(FieldType.INFO.getStringValue());
         fio.setValue(rabbitResponse.getSrch_res().getRes().get(0).getFio());
 
-        response.setFields(List.of(userId, fio));
+        List<Field> fields = new ArrayList<>();
+        fields.add(userId);
+        fields.add(fio);
+
+        response.setFields(fields);
         return response;
     }
 
