@@ -4,8 +4,10 @@ import com.azoft.energosbyt.dto.BasePayCashLkk;
 import com.azoft.energosbyt.dto.Command;
 import com.azoft.energosbyt.dto.QiwiRequest;
 import com.azoft.energosbyt.dto.QiwiResponse;
+import com.azoft.energosbyt.entity.QiwiTxnEntity;
 import com.azoft.energosbyt.exception.ApiException;
 import com.azoft.energosbyt.exception.QiwiResultCode;
+import com.azoft.energosbyt.repository.QiwiTxnRepository;
 import com.azoft.energosbyt.service.QiwiRequestService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,10 +42,12 @@ public class PayRequestService implements QiwiRequestService {
 
     private final AmqpTemplate template;
     private final ObjectMapper mapper;
+    private final QiwiTxnRepository qiwiTxnRepository;
 
-    public PayRequestService(AmqpTemplate template, ObjectMapper mapper) {
+    public PayRequestService(AmqpTemplate template, ObjectMapper mapper, QiwiTxnRepository qiwiTxnRepository) {
         this.template = template;
         this.mapper = mapper;
+        this.qiwiTxnRepository = qiwiTxnRepository;
     }
 
     @Override
@@ -52,7 +56,16 @@ public class PayRequestService implements QiwiRequestService {
         byte[] body = createPayMessageBody(qiwiRequest);
         Message requestMessage = new Message(body, messageProperties);
         template.send(payRequestQueueName, requestMessage);
-        return QiwiResponse.ok();
+        return getPayQiwiResponse(qiwiRequest);
+    }
+
+    private QiwiResponse getPayQiwiResponse(QiwiRequest qiwiRequest) {
+        QiwiResponse response = QiwiResponse.ok();
+        response.setOsmp_txn_id(qiwiRequest.getTxn_id());
+
+        QiwiTxnEntity payOperationRecord = qiwiTxnRepository.findByTxnId(qiwiRequest.getTxn_id());
+        response.setPrv_txn(payOperationRecord.getId());
+        return response;
     }
 
     private MessageProperties createPayMessageProperties() {

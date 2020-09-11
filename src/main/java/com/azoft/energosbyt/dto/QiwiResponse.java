@@ -14,7 +14,7 @@ import lombok.Data;
 public class QiwiResponse {
   private String osmp_txn_id;
   @JsonInclude(JsonInclude.Include.NON_NULL)
-  private String prv_txn;
+  private Long prv_txn;
   private Integer result;
   private String comment;
   @JsonInclude(JsonInclude.Include.NON_NULL)
