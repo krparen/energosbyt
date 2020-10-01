@@ -105,7 +105,7 @@ public class CheckRequestService implements QiwiRequestService {
 
         BasePerson.Srch search = new BasePerson.Srch();
         search.setAccount_number(qiwiRequest.getAccount());
-        search.setDept("SESB");
+        search.setDept("ORESB");
         rabbitRequest.setSrch(search);
         return rabbitRequest;
     }
