@@ -25,7 +25,7 @@ public class BaseMeter {
 
     @Data
     public static class Srch_res {
-        List<Srch_res_s> serv = new ArrayList<>();
+        private List<Srch_res_s> serv = new ArrayList<>();
 
         @Data
         public static class Srch_res_s {
@@ -47,7 +47,7 @@ public class BaseMeter {
                     private String percent;
                 }
 
-                List<Conn_history> CHs = new ArrayList<>();
+                private List<Conn_history> CHs = new ArrayList<>();
 
                 @Data
                 public static class Sp_history {
@@ -57,10 +57,10 @@ public class BaseMeter {
                     private String m_const;
                 }
 
-                List<Sp_history> SPHs = new ArrayList<>();
+                private List<Sp_history> SPHs = new ArrayList<>();
             }
 
-            List<Service_point> SPs = new ArrayList<>();
+            private List<Service_point> SPs = new ArrayList<>();
         }
     }
 

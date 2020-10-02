@@ -42,26 +42,102 @@ public class CheckRequestService implements QiwiRequestService {
     @Override
     public QiwiResponse process(QiwiRequest qiwiRequest) {
 
-        String replyQueueName = null;
+        String personReplyQueueName = null;
+        String metersReplyQueueName = null;
 
         try {
-            replyQueueName = declareReplyQueue();
-            MessageProperties messageProperties = createCheckMessageProperties(replyQueueName, qiwiRequest);
-            byte[] body = createCheckMessageBody(qiwiRequest);
-            Message requestMessage = new Message(body, messageProperties);
+            personReplyQueueName = declareReplyQueueWithUuidName();
+            MessageProperties personMessageProperties = createPersonMessageProperties(personReplyQueueName, qiwiRequest);
+            byte[] personMessageBody = createPersonMessageBody(qiwiRequest);
+            Message personRequestMessage = new Message(personMessageBody, personMessageProperties);
 
-            template.send(checkRequestQueueName, requestMessage);
-            BasePerson rabbitResponse = receiveResponse(replyQueueName);
+            template.send(checkRequestQueueName, personRequestMessage);
+            BasePerson personRabbitResponse = receivePersonResponse(personReplyQueueName);
 
-            return getCheckQiwiResponse(qiwiRequest, rabbitResponse);
+            if (personRabbitResponse.getSrch_res().getRes().isEmpty()) {
+                String message = "No person found for account id = " + qiwiRequest.getAccount();
+                log.error(message);
+                throw new ApiException(message, QiwiResultCode.ABONENT_ID_NOT_FOUND, true);
+            }
+
+            String personId = personRabbitResponse.getSrch_res().getRes().get(0).getId();
+
+            metersReplyQueueName = declareReplyQueueWithUuidName();
+            MessageProperties metersMessageProperties = createMetersMessageProperties(metersReplyQueueName);
+            byte[] metersMessageBody = createMetersMessageBody(personId);
+            Message metersRequestMessage = new Message(metersMessageBody, metersMessageProperties);
+
+            template.send(checkRequestQueueName, metersRequestMessage);
+
+            BaseMeter metersRabbitResponse = receiveMetersResponse(metersReplyQueueName);
+            log.info("User with id {} has meters {}", personId, metersRabbitResponse.getSrch_res().getServ());
+
+
+            return getCheckQiwiResponse(qiwiRequest, personRabbitResponse);
         } finally {
-            if (replyQueueName != null) {
-                rabbitAdmin.deleteQueue(replyQueueName);
+            if (personReplyQueueName != null) {
+                rabbitAdmin.deleteQueue(personReplyQueueName);
+            }
+            if (metersReplyQueueName != null) {
+                rabbitAdmin.deleteQueue(metersReplyQueueName);
             }
         }
     }
 
-    private String declareReplyQueue() {
+    private BaseMeter receiveMetersResponse(String replyQueueName) {
+        Message responseMessage = safelyReceiveResponse(replyQueueName);
+        String responseAsString = getMessageBodyAsString(responseMessage);
+        return safelyDeserializeMeterFromResponse(responseAsString);
+    }
+
+    private BaseMeter safelyDeserializeMeterFromResponse(String responseAsString) {
+        BaseMeter response = null;
+        try {
+            response = mapper.readValue(responseAsString, BaseMeter.class);
+        } catch (JsonProcessingException e) {
+            String message = "Rabbit response deserialization failed";
+            log.error(message, e);
+            throw new ApiException(message, e, QiwiResultCode.TRY_AGAIN_LATER);
+        }
+
+        log.info("response from rabbit: {}", response);
+        return response;
+    }
+
+    private MessageProperties createMetersMessageProperties(String metersReplyQueueName) {
+        MessageProperties messageProperties = new MessageProperties();
+        messageProperties.setHeader("type", "searchMeter");
+        messageProperties.setHeader("m_guid", "08.06.2020"); // легаси заголовок, должен присутствовать, а что в нём - не важно
+        messageProperties.setHeader("reply-to", metersReplyQueueName);
+        messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
+        return messageProperties;
+    }
+
+    private byte[] createMetersMessageBody(String personId) {
+        String bodyAsString = null;
+        try {
+            bodyAsString = mapper.writeValueAsString(createMetersRabbitRequest(personId));
+        } catch (JsonProcessingException e) {
+            String message = "Rabbit request serialization failed";
+            log.error(message, e);
+            throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
+        }
+        log.info("body as String: {}", bodyAsString);
+
+        return bodyAsString.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private BaseMeter createMetersRabbitRequest(String personId) {
+        BaseMeter rabbitRequest = new BaseMeter();
+        rabbitRequest.setSystem_id(thisSystemId);
+
+        BaseMeter.Srch search = new BaseMeter.Srch();
+        search.setPerson_Id(personId);
+        rabbitRequest.setSrch(search);
+        return rabbitRequest;
+    }
+
+    private String declareReplyQueueWithUuidName() {
         String replyQueueName = UUID.randomUUID().toString();
         Queue newQueue = new Queue(replyQueueName, false, false, true);
 
@@ -75,7 +151,7 @@ public class CheckRequestService implements QiwiRequestService {
 
     }
 
-    private MessageProperties createCheckMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
+    private MessageProperties createPersonMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
         MessageProperties messageProperties = new MessageProperties();
         messageProperties.setHeader("type", qiwiRequest.getCommand().getRabbitType());
         messageProperties.setHeader("m_guid", "08.06.2020"); // легаси заголовок, должен присутствовать, а что в нём - не важно
@@ -84,11 +160,11 @@ public class CheckRequestService implements QiwiRequestService {
         return messageProperties;
     }
 
-    private byte[] createCheckMessageBody(QiwiRequest request) {
+    private byte[] createPersonMessageBody(QiwiRequest request) {
 
         String bodyAsString = null;
         try {
-            bodyAsString = mapper.writeValueAsString(createCheckRabbitRequest(request));
+            bodyAsString = mapper.writeValueAsString(createPersonRabbitRequest(request));
         } catch (JsonProcessingException e) {
             String message = "Rabbit request serialization failed";
             log.error(message, e);
@@ -99,7 +175,7 @@ public class CheckRequestService implements QiwiRequestService {
         return bodyAsString.getBytes(StandardCharsets.UTF_8);
     }
 
-    private BasePerson createCheckRabbitRequest(QiwiRequest qiwiRequest) {
+    private BasePerson createPersonRabbitRequest(QiwiRequest qiwiRequest) {
         BasePerson rabbitRequest = new BasePerson();
         rabbitRequest.setSystem_id(thisSystemId);
 
@@ -110,8 +186,13 @@ public class CheckRequestService implements QiwiRequestService {
         return rabbitRequest;
     }
 
-    private BasePerson receiveResponse(String replyQueueName) {
+    private BasePerson receivePersonResponse(String replyQueueName) {
         Message responseMessage = safelyReceiveResponse(replyQueueName);
+        String responseAsString = getMessageBodyAsString(responseMessage);
+        return safelyDeserializePersonFromResponse(responseAsString);
+    }
+
+    private String getMessageBodyAsString(Message responseMessage) {
         String responseAsString = null;
         try {
             responseAsString = new String(responseMessage.getBody(), StandardCharsets.UTF_8.name());
@@ -120,7 +201,7 @@ public class CheckRequestService implements QiwiRequestService {
             log.error(message + "; rabbit message: {}", responseMessage);
             throw new ApiException(message, QiwiResultCode.OTHER_PROVIDER_ERROR);
         }
-        return safelyDeserializeFromResponse(responseAsString);
+        return responseAsString;
     }
 
     private Message safelyReceiveResponse(String replyQueueName) {
@@ -141,7 +222,7 @@ public class CheckRequestService implements QiwiRequestService {
         return responseMessage;
     }
 
-    private BasePerson safelyDeserializeFromResponse(String responseAsString) {
+    private BasePerson safelyDeserializePersonFromResponse(String responseAsString) {
         BasePerson response = null;
         try {
             response = mapper.readValue(responseAsString, BasePerson.class);
@@ -158,11 +239,6 @@ public class CheckRequestService implements QiwiRequestService {
     private QiwiResponse getCheckQiwiResponse(QiwiRequest qiwiRequest, BasePerson rabbitResponse) {
 
         QiwiResponse response = new QiwiResponse();
-
-        if (rabbitResponse.getSrch_res().getRes().isEmpty()) {
-            response.setResult(QiwiResultCode.ABONENT_ID_NOT_FOUND.getNumericCode());
-            return response;
-        }
 
         response.setResult(QiwiResultCode.OK.getNumericCode());
         response.setOsmp_txn_id(qiwiRequest.getTxn_id());
