@@ -8,15 +8,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -44,36 +43,29 @@ public class CheckRequestService implements QiwiRequestService {
 
         String personReplyQueueName = null;
         String metersReplyQueueName = null;
+        String meterValuesReplyQueueName = null;
 
         try {
             personReplyQueueName = declareReplyQueueWithUuidName();
-            MessageProperties personMessageProperties = createPersonMessageProperties(personReplyQueueName, qiwiRequest);
-            byte[] personMessageBody = createPersonMessageBody(qiwiRequest);
-            Message personRequestMessage = new Message(personMessageBody, personMessageProperties);
-
-            template.send(checkRequestQueueName, personRequestMessage);
-            BasePerson personRabbitResponse = receivePersonResponse(personReplyQueueName);
-
-            if (personRabbitResponse.getSrch_res().getRes().isEmpty()) {
-                String message = "No person found for account id = " + qiwiRequest.getAccount();
-                log.error(message);
-                throw new ApiException(message, QiwiResultCode.ABONENT_ID_NOT_FOUND, true);
-            }
-
+            BasePerson personRabbitResponse = searchPersonByAccount(qiwiRequest, personReplyQueueName);
             String personId = personRabbitResponse.getSrch_res().getRes().get(0).getId();
 
             metersReplyQueueName = declareReplyQueueWithUuidName();
-            MessageProperties metersMessageProperties = createMetersMessageProperties(metersReplyQueueName);
-            byte[] metersMessageBody = createMetersMessageBody(personId);
-            Message metersRequestMessage = new Message(metersMessageBody, metersMessageProperties);
-
-            template.send(checkRequestQueueName, metersRequestMessage);
-
-            BaseMeter metersRabbitResponse = receiveMetersResponse(metersReplyQueueName);
+            BaseMeter metersRabbitResponse = searchMetersByPersonId(metersReplyQueueName, personId);
             log.info("User with id {} has meters {}", personId, metersRabbitResponse.getSrch_res().getServ());
 
+            Set<String> activeMeterIds = getActiveMeterIds(metersRabbitResponse);
+            List<BaseMeter> activeMeters = new ArrayList<>();
+            activeMeterIds.forEach(id -> {
+                String meterValueReplyQueue = declareReplyQueueWithUuidName();
+                BaseMeter activeMeter = getMeterById(meterValueReplyQueue, id);
+                activeMeters.add(activeMeter);
+            });
 
-            return getCheckQiwiResponse(qiwiRequest, personRabbitResponse);
+
+
+
+            return getCheckQiwiResponse(qiwiRequest, personRabbitResponse, activeMeters);
         } finally {
             if (personReplyQueueName != null) {
                 rabbitAdmin.deleteQueue(personReplyQueueName);
@@ -82,6 +74,102 @@ public class CheckRequestService implements QiwiRequestService {
                 rabbitAdmin.deleteQueue(metersReplyQueueName);
             }
         }
+    }
+
+    private Set<String> getActiveMeterIds(BaseMeter metersSearchResult) {
+        Set<String> activeMeterIds = new HashSet<>();
+
+        List<BaseMeter.Srch_res.Srch_res_s> services = metersSearchResult.getSrch_res().getServ();
+        for (BaseMeter.Srch_res.Srch_res_s service : services) {
+            List<BaseMeter.Srch_res.Srch_res_s.Service_point> servicePoints = service.getSPs();
+            for (BaseMeter.Srch_res.Srch_res_s.Service_point servicePoint : servicePoints) {
+                List<BaseMeter.Srch_res.Srch_res_s.Service_point.Conn_history> connectionHistories = servicePoint.getCHs();
+                boolean isOpenConnectionExists = false;
+                for (BaseMeter.Srch_res.Srch_res_s.Service_point.Conn_history connectionHistory : connectionHistories) {
+                    if (connectionHistory.getStop_date() == null) {
+                        isOpenConnectionExists = true;
+                        break;
+                    }
+                }
+
+                if (isOpenConnectionExists) {
+                    List<BaseMeter.Srch_res.Srch_res_s.Service_point.Sp_history> spHistories = servicePoint.getSPHs();
+                    for (BaseMeter.Srch_res.Srch_res_s.Service_point.Sp_history spHistory : spHistories) {
+                        if (spHistory.getRemove_date() == null) {
+                            activeMeterIds.add(spHistory.getMeter_id());
+                        }
+                    }
+                }
+            }
+        }
+
+        return activeMeterIds;
+    }
+
+    private BaseMeter searchMetersByPersonId(String metersReplyQueueName, String personId) {
+        MessageProperties metersMessageProperties = createMetersMessageProperties(metersReplyQueueName);
+        byte[] metersMessageBody = createMetersMessageBody(personId);
+        Message metersRequestMessage = new Message(metersMessageBody, metersMessageProperties);
+
+        template.send(checkRequestQueueName, metersRequestMessage);
+
+        return receiveMetersResponse(metersReplyQueueName);
+    }
+
+    private BaseMeter getMeterById(String meterValuesReplyQueueName, String meterId) {
+        MessageProperties metersMessageProperties = createMeterValuesMessageProperties(meterValuesReplyQueueName);
+        byte[] metersMessageBody = createMeterValuesMessageBody(meterId);
+        Message meterValuesRequestMessage = new Message(metersMessageBody, metersMessageProperties);
+
+        template.send(checkRequestQueueName, meterValuesRequestMessage);
+
+        return receiveMetersResponse(meterValuesReplyQueueName);
+    }
+
+    private byte[] createMeterValuesMessageBody(String meterId) {
+        String bodyAsString = null;
+        try {
+            bodyAsString = mapper.writeValueAsString(createMeterValuesRabbitRequest(meterId));
+        } catch (JsonProcessingException e) {
+            String message = "Rabbit request serialization failed";
+            log.error(message, e);
+            throw new ApiException(message, e, QiwiResultCode.OTHER_PROVIDER_ERROR);
+        }
+        log.info("body as String: {}", bodyAsString);
+
+        return bodyAsString.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private BaseMeter createMeterValuesRabbitRequest(String meterId) {
+        BaseMeter rabbitRequest = new BaseMeter();
+        rabbitRequest.setSystem_id(thisSystemId);
+        rabbitRequest.setId(meterId);
+        return rabbitRequest;
+    }
+
+    private MessageProperties createMeterValuesMessageProperties(String meterValuesReplyQueueName) {
+        MessageProperties messageProperties = new MessageProperties();
+        messageProperties.setHeader("type", "getMeter");
+        messageProperties.setHeader("m_guid", "08.06.2020"); // легаси заголовок, должен присутствовать, а что в нём - не важно
+        messageProperties.setHeader("reply-to", meterValuesReplyQueueName);
+        messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
+        return messageProperties;
+    }
+
+    private BasePerson searchPersonByAccount(QiwiRequest qiwiRequest, String personReplyQueueName) {
+        MessageProperties personMessageProperties = createPersonMessageProperties(personReplyQueueName);
+        byte[] personMessageBody = createPersonMessageBody(qiwiRequest);
+        Message personRequestMessage = new Message(personMessageBody, personMessageProperties);
+
+        template.send(checkRequestQueueName, personRequestMessage);
+        BasePerson personRabbitResponse = receivePersonResponse(personReplyQueueName);
+
+        if (personRabbitResponse.getSrch_res().getRes().isEmpty()) {
+            String message = "No person found for account id = " + qiwiRequest.getAccount();
+            log.error(message);
+            throw new ApiException(message, QiwiResultCode.ABONENT_ID_NOT_FOUND, true);
+        }
+        return personRabbitResponse;
     }
 
     private BaseMeter receiveMetersResponse(String replyQueueName) {
@@ -151,9 +239,9 @@ public class CheckRequestService implements QiwiRequestService {
 
     }
 
-    private MessageProperties createPersonMessageProperties(String replyQueueName, QiwiRequest qiwiRequest) {
+    private MessageProperties createPersonMessageProperties(String replyQueueName) {
         MessageProperties messageProperties = new MessageProperties();
-        messageProperties.setHeader("type", qiwiRequest.getCommand().getRabbitType());
+        messageProperties.setHeader("type", "searchPerson");
         messageProperties.setHeader("m_guid", "08.06.2020"); // легаси заголовок, должен присутствовать, а что в нём - не важно
         messageProperties.setHeader("reply-to", replyQueueName);
         messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
@@ -236,7 +324,7 @@ public class CheckRequestService implements QiwiRequestService {
         return response;
     }
 
-    private QiwiResponse getCheckQiwiResponse(QiwiRequest qiwiRequest, BasePerson rabbitResponse) {
+    private QiwiResponse getCheckQiwiResponse(QiwiRequest qiwiRequest, BasePerson rabbitResponse, List<BaseMeter> activeMeters) {
 
         QiwiResponse response = new QiwiResponse();
 
