@@ -43,7 +43,7 @@ public class CheckRequestService implements QiwiRequestService {
 
         String personReplyQueueName = null;
         String metersReplyQueueName = null;
-        String meterValuesReplyQueueName = null;
+        Set<String> openMeterValueReplyQueues = new HashSet<>();
 
         try {
             personReplyQueueName = declareReplyQueueWithUuidName();
@@ -54,15 +54,7 @@ public class CheckRequestService implements QiwiRequestService {
             BaseMeter metersRabbitResponse = searchMetersByPersonId(metersReplyQueueName, personId);
             log.info("User with id {} has meters {}", personId, metersRabbitResponse.getSrch_res().getServ());
 
-            Set<String> activeMeterIds = getActiveMeterIds(metersRabbitResponse);
-            List<BaseMeter> activeMeters = new ArrayList<>();
-            activeMeterIds.forEach(id -> {
-                String meterValueReplyQueue = declareReplyQueueWithUuidName();
-                BaseMeter activeMeter = getMeterById(meterValueReplyQueue, id);
-                activeMeters.add(activeMeter);
-            });
-
-
+            List<BaseMeter> activeMeters = getActiveMeters(openMeterValueReplyQueues, metersRabbitResponse);
 
 
             return getCheckQiwiResponse(qiwiRequest, personRabbitResponse, activeMeters);
@@ -73,7 +65,26 @@ public class CheckRequestService implements QiwiRequestService {
             if (metersReplyQueueName != null) {
                 rabbitAdmin.deleteQueue(metersReplyQueueName);
             }
+            openMeterValueReplyQueues.forEach( queueName -> {
+                if (queueName != null) {
+                    rabbitAdmin.deleteQueue(queueName);
+                }
+            });
         }
+    }
+
+    private List<BaseMeter> getActiveMeters(Set<String> openMeterValueReplyQueues, BaseMeter metersRabbitResponse) {
+        Set<String> activeMeterIds = getActiveMeterIds(metersRabbitResponse);
+        List<BaseMeter> activeMeters = new ArrayList<>();
+        activeMeterIds.forEach(id -> {
+            String meterValueReplyQueue = declareReplyQueueWithUuidName();
+            openMeterValueReplyQueues.add(meterValueReplyQueue);
+            BaseMeter activeMeter = getMeterById(meterValueReplyQueue, id);
+            activeMeters.add(activeMeter);
+            rabbitAdmin.deleteQueue(meterValueReplyQueue);
+            openMeterValueReplyQueues.remove(meterValueReplyQueue);
+        });
+        return activeMeters;
     }
 
     private Set<String> getActiveMeterIds(BaseMeter metersSearchResult) {
@@ -331,19 +342,15 @@ public class CheckRequestService implements QiwiRequestService {
         response.setResult(QiwiResultCode.OK.getNumericCode());
         response.setOsmp_txn_id(qiwiRequest.getTxn_id());
 
-        Field userId = new Field();
-        userId.setName("id");
-        userId.setType(FieldType.INFO.getStringValue());
-        userId.setValue(rabbitResponse.getSrch_res().getRes().get(0).getId());
-
-        Field fio = new Field();
-        fio.setName("fio");
-        fio.setType(FieldType.INFO.getStringValue());
-        fio.setValue(rabbitResponse.getSrch_res().getRes().get(0).getFio());
-
         List<Field> fields = new ArrayList<>();
-        fields.add(userId);
-        fields.add(fio);
+
+        activeMeters.forEach(meter -> {
+            Field meterField = new Field();
+            meterField.setName(meter.getId());
+            meterField.setType(FieldType.DISP.getStringValue());
+            meterField.setValue(meter.getNumber());
+            fields.add(meterField);
+        });
 
         response.setFields(fields);
         return response;
