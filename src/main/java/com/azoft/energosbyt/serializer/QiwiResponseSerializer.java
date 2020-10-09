@@ -29,18 +29,15 @@ public class QiwiResponseSerializer extends StdSerializer<QiwiResponse> {
             xmlGenerator.writeStringField("osmp_txn_id", qiwiResponse.getOsmp_txn_id());
 
             if (qiwiResponse.getPrv_txn() != null) {
-                xmlGenerator.writeFieldName("prv_txn");
-                xmlGenerator.writeNumber(qiwiResponse.getPrv_txn());
+                xmlGenerator.writeNumberField("prv_txn", qiwiResponse.getPrv_txn());
             }
 
-            xmlGenerator.writeFieldName("result");
-            xmlGenerator.writeNumber(qiwiResponse.getResult());
-
+            xmlGenerator.writeNumberField("result", qiwiResponse.getResult());
             xmlGenerator.writeStringField("comment", qiwiResponse.getComment());
+
             if (qiwiResponse.getSum() != null) {
                 xmlGenerator.writeStringField("sum", qiwiResponse.getSum().toString());
             }
-
 
 
             writeFields(xmlGenerator, qiwiResponse.getFields());
@@ -62,10 +59,14 @@ public class QiwiResponseSerializer extends StdSerializer<QiwiResponse> {
             xmlGenerator.writeFieldName("field" + (i + 1));
             xmlGenerator.writeStartObject();
             xmlGenerator.setNextIsAttribute(true);
-            xmlGenerator.writeStringField("name", fields.get(i).getName());
+
+            String name = fields.get(i).getName();
+            String finalName = name != null ? name : "disp" + (i + 1); // если имя поля не задано, то у fieldI название nameI
+
+            xmlGenerator.writeStringField("name", finalName);
             xmlGenerator.writeStringField("type", fields.get(i).getType());
             xmlGenerator.setNextIsAttribute(false);
-            xmlGenerator.writeRaw(fields.get(i).getValue());
+            xmlGenerator.writeRaw(fields.get(i).getValue()); // тут пишем значение элемента
             xmlGenerator.writeEndObject();
         }
 
